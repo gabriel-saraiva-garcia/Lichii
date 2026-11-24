@@ -1,0 +1,29 @@
+{
+  "title_id": "0400486024DEC000",
+  "game_version": "2.0.0",
+  "scene": "FILL_latest-save location, save timestamp/hash and camera; load and do not move",
+  "settings": {
+    "resolution_scale": 1.0,
+    "guest_render_dimensions": "2560x1440 (verify in log/capture)",
+    "upscaler": "NVIDIA DLSS Quality, game network enabled (verify active settings)",
+    "present_dimensions": "3840x2160 (verify in log/capture)",
+    "mode": "FILL_docked or handheld",
+    "gpu_accuracy": "Fast",
+    "cpu_clock": "FILL_effective clock setting",
+    "multicore": true,
+    "render_thread": true,
+    "frame_generation": false,
+    "fps_limit": 60,
+    "vsync": "FILL_effective mode and display refresh",
+    "addons": ["Max Resolution (built-in)", "Texture Pool x2 (built-in)", "FPS Unlock (built-in)"],
+    "cache_state": "warm; compile pipelines and visit this scene before measurement"
+  },
+  "hardware": {
+    "cpu": "AMD Ryzen 7 5700X",
+    "gpu": "NVIDIA RTX 2080 Ti 11 GB",
+    "ram": "16 GB DDR4 3466 MHz (user reported)",
+    "os": "Windows 11",
+    "driver": "617.14",
+    "power_plan_hags_overlays": "FILL_record unchanged power plan, HAGS and overlays"
+  }
+}
