@@ -123,9 +123,12 @@ Microsoft requires WPT to share the existing Windows SDK root; the local
 `windows-adk/WindowsPerformanceToolkit` entry is a junction to that system
 installation. No display driver change is required for this setup.
 
-As of the initial local inspection, the target PC lacks discoverable CMake,
-Ninja, LLVM, Qt development files and the Visual Studio SDK. The generated
-preflight report documents these failures. Compilation is not yet verified.
+The toolchain is now installed and verified. The exact, clean build-386
+source compiled successfully with LLVM 22.1.8, Qt 6.8.3, Windows SDK 26100,
+ThinLTO and the pinned Windows PGO profile. Its executable, PDB, deployed
+runtime and completed build manifest are preserved locally in
+`../Lichii-toolchain/packages/build386-local-pgo/`. Successful compilation
+does not yet establish performance equivalence or validate a candidate.
 
 ## Reproduce the warm-scene benchmark
 
@@ -139,7 +142,10 @@ $env:EDEN_NX2_DEBUG_SERVER = '127.0.0.1:6545'
 & 'F:/Games/Emuladores/lichii-windows-x86_64-pgo/lichii.exe' -g 'D:/Games/Legend of Zelda - Ocarina of Time/games/0400486024dec000_v131072.nup'
 ```
 
-Choose Continue → the identified latest manual save → Load. Touch no movement
+Choose Continue → the identified Zora River manual save, 2026-11-24 16:53 → Load.
+Scroll past newer autosaves; the first list entry can be a different scene.
+In the in-game Load confirmation, move from Cancel to Load before accepting.
+Touch no movement
 or camera controls. Let assets/pipelines finish warming. Retain a screenshot
 before measurement; take captures outside measured windows. Prepare a local
 copy of `tools/nx2/perf_workload.example.json`, replacing every `FILL_` value

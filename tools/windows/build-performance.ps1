@@ -122,7 +122,7 @@ if ($Action -eq 'Configure') { exit 0 }
 $targets = if ($Tests) { @() } else { @('--target', 'lichii', 'lichii-cmd') }
 Invoke-Checked 'cmake' (@('--build', $BuildDirectory, '--parallel', "$Jobs") + $targets)
 if ($Tests) { Invoke-Checked 'ctest' @('--test-dir', $BuildDirectory, '--output-on-failure') }
-foreach ($file in @('bin/lichii.exe', 'bin/lichii.pdb', 'bin/lichii-cmd.exe', 'CMakeCache.txt', 'compile_commands.json')) {
+foreach ($file in @('bin/lichii.exe', 'bin/lichii.pdb', 'bin/eden-cli.exe', 'bin/eden-cli.pdb', 'CMakeCache.txt', 'compile_commands.json')) {
     $path = Join-Path $BuildDirectory $file
     if (Test-Path -LiteralPath $path) { $report[$file] = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash }
 }
