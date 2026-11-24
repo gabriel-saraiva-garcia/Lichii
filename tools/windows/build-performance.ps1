@@ -6,6 +6,7 @@ param(
     [string]$Action = 'Preflight',
     [string]$LlvmRoot = $env:LLVM_ROOT,
     [string]$QtRoot = $env:QT_ROOT_DIR,
+    [string]$SourceDirectory = (Join-Path $PSScriptRoot '../..'),
     [string]$BuildDirectory = 'build/performance-pgo',
     [ValidateRange(1, 32)][int]$Jobs = 4,
     [switch]$Tests
@@ -13,7 +14,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($Action -eq 'Test' -and -not $Tests) { throw 'Test requires -Tests and a separate build directory' }
-$source = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+$source = (Resolve-Path -LiteralPath $SourceDirectory).Path
 if (-not [IO.Path]::IsPathRooted($BuildDirectory)) {
     $BuildDirectory = Join-Path $source $BuildDirectory
 }
@@ -84,8 +85,13 @@ if (-not $env:VCToolsInstallDir -or -not $env:WindowsSdkDir) {
 $qtConfig = "$QtRoot/lib/cmake/Qt6/Qt6ConfigVersion.cmake"
 if (-not $QtRoot -or -not (Test-Path -LiteralPath $qtConfig)) {
     $problems.Add('QT_ROOT_DIR must be Qt 6.8.3 win64_msvc2022_64 with qtcharts and qtimageformats')
-} elseif ((Get-Content -LiteralPath $qtConfig -Raw) -notmatch '6\.8\.3') {
-    $problems.Add('Expected Qt 6.8.3')
+} elseif (-not (Test-Path -LiteralPath "$QtRoot/bin/qmake.exe")) {
+    $problems.Add('Qt qmake executable is missing; cannot verify the kit version')
+} else {
+    $versions['qt_version'] = (& "$QtRoot/bin/qmake.exe" -query QT_VERSION) -join ''
+    if ($LASTEXITCODE -ne 0 -or $versions['qt_version'].Trim() -ne '6.8.3') {
+        $problems.Add('Expected Qt 6.8.3')
+    }
 }
 foreach ($module in @('Qt6Charts', 'Qt6Svg')) {
     if (-not (Test-Path -LiteralPath "$QtRoot/lib/cmake/$module/${module}Config.cmake")) {

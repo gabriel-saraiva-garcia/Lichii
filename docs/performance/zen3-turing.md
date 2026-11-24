@@ -109,6 +109,20 @@ using the Linux PGO profile, or silently falling back to a non-PGO build.
 This is reproducibility of source/toolchain/flags, not a bit-for-bit binary claim;
 record the MSVC/SDK and transitive dependency selections too.
 
+The build helper also accepts `-SourceDirectory`, so the recipe can compile a
+clean detached build-386 worktree while development stays on the fork branch.
+Use an absolute `-BuildDirectory` when keeping outputs beside that worktree.
+Qt's version is checked with the kit's `qmake -query QT_VERSION`; the outer
+Qt6ConfigVersion.cmake may delegate to another file and contain no version.
+
+The owner's local tools are in the sibling `Lichii-toolchain` directory. Its
+`Enter-LichiiToolchain.ps1` activates the current shell, `Build-Baseline.ps1`
+builds the pinned worktree, and `Verify-Toolchain.ps1` checks installed tools.
+Its README and receipts describe the exact installed versions and paths.
+Microsoft requires WPT to share the existing Windows SDK root; the local
+`windows-adk/WindowsPerformanceToolkit` entry is a junction to that system
+installation. No display driver change is required for this setup.
+
 As of the initial local inspection, the target PC lacks discoverable CMake,
 Ninja, LLVM, Qt development files and the Visual Studio SDK. The generated
 preflight report documents these failures. Compilation is not yet verified.
