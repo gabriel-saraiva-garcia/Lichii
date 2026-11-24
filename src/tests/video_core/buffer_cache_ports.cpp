@@ -1918,6 +1918,101 @@ TEST_CASE("Adjacent read downloads supply the same bytes with fewer host waits",
     REQUIRE(f.runtime.host_read_waits == (read_runs ? 1 : 4));
 }
 
+TEST_CASE("Read checks compare an adjacent page after its speculative copy lands",
+          "[buffer_ports][read_runs][read_check]") {
+    Fixture f;
+    const Nx2TitleScope nx2_title;
+    const bool check_enabled = GENERATE(false, true);
+    const bool mismatch = GENERATE(false, true);
+    const ReadCheckScope check{check_enabled ? 1U : 0U};
+    f.cache->SetReadRunPageFilter([](DAddr, u64) { return true; });
+    const auto id = Access::Add(*f.cache, 0x20000, 0x10000);
+    auto& buffer = Access::Get(*f.cache, id);
+    WriteByDispatch(f, id, 0x20000, 0x80, 1);
+    WriteByDispatch(f, id, 0x21000, 0x80, 2);
+    const auto first = f.cache->GetFlushArea(0x20010, 4);
+    REQUIRE_FALSE(first->preemtive);
+    f.cache->DownloadMemoryForRead(first->start_address, first->end_address - first->start_address);
+    REQUIRE(Access::HasSpeculativeRead(*f.cache, 0x21010));
+    f.cache->FinishReadDownloads(first->start_address, first->end_address - first->start_address);
+    REQUIRE(Access::ReadDownloads(*f.cache) == 0);
+    REQUIRE_FALSE(f.cache->IsRegionGpuModified(0x21000, 0x80));
+    REQUIRE(Access::ReadChecks(*f.cache).compared == (check_enabled ? 0x80 : 0));
+    REQUIRE(ReadWord(f, 0x20010).preemtive);
+
+    if (mismatch) {
+        // An unreported GPU write must be caught even though the prefetched page is clean.
+        std::fill_n(buffer.bytes.begin() + 0x1040, 0x10, u8{3});
+    }
+    REQUIRE(ReadWord(f, 0x21010).preemtive == !check_enabled);
+    REQUIRE(f.bytes[0x11040] == 2);
+    REQUIRE(Access::ReadChecks(*f.cache).checked == (check_enabled ? 2 : 0));
+    REQUIRE(Access::ReadChecks(*f.cache).compared == (check_enabled ? 0x100 : 0));
+    REQUIRE(Access::ReadChecks(*f.cache).mismatched == (check_enabled && mismatch ? 0x10 : 0));
+    REQUIRE(Access::ReadChecks(*f.cache).uncovered == 0);
+    REQUIRE(Access::ReadChecks(*f.cache).rewritten == 0);
+    REQUIRE(f.runtime.host_read_waits == (check_enabled ? 2 : 1));
+    // The landed snapshot is consumed once, as for early downloads.
+    REQUIRE(ReadWord(f, 0x21010).preemtive);
+    REQUIRE(Access::ReadChecks(*f.cache).compared == (check_enabled ? 0x100 : 0));
+}
+
+TEST_CASE("Read checks exclude adjacent bytes superseded by a new GPU write",
+          "[buffer_ports][read_runs][read_check]") {
+    Fixture f;
+    const Nx2TitleScope nx2_title;
+    const ReadCheckScope check{1};
+    const bool before_landing = GENERATE(false, true);
+    f.cache->SetReadRunPageFilter([](DAddr, u64) { return true; });
+    const auto id = Access::Add(*f.cache, 0x20000, 0x10000);
+    WriteByDispatch(f, id, 0x20000, 0x80, 1);
+    WriteByDispatch(f, id, 0x21000, 0x80, 2);
+    f.cache->DownloadMemoryForRead(0x20000, 0x1000);
+    REQUIRE(Access::HasSpeculativeRead(*f.cache, 0x21010));
+    if (before_landing) {
+        WriteByDispatch(f, id, 0x21040, 0x10, 3);
+    }
+    f.cache->FinishReadDownloads(0x20000, 0x1000);
+    REQUIRE(f.bytes[0x11040] == (before_landing ? 0 : 2));
+    if (!before_landing) {
+        WriteByDispatch(f, id, 0x21040, 0x10, 3);
+    }
+    REQUIRE_FALSE(ReadWord(f, 0x21010).preemtive);
+    REQUIRE(f.bytes[0x11040] == 3);
+    REQUIRE(f.bytes[0x11030] == 2);
+    REQUIRE(Access::ReadChecks(*f.cache).checked == 2);
+    // Only the new GPU write is downloaded; the remaining 0x70 bytes use the landed snapshot.
+    REQUIRE(Access::ReadChecks(*f.cache).compared == 0x100);
+    REQUIRE(Access::ReadChecks(*f.cache).mismatched == 0);
+    REQUIRE(Access::ReadChecks(*f.cache).uncovered == 0);
+}
+
+TEST_CASE("Read checks exclude adjacent landed bytes replaced by a CPU write",
+          "[buffer_ports][read_runs][read_check]") {
+    Fixture f;
+    const Nx2TitleScope nx2_title;
+    const ReadCheckScope check{1};
+    f.cache->SetReadRunPageFilter([](DAddr, u64) { return true; });
+    const auto id = Access::Add(*f.cache, 0x20000, 0x10000);
+    WriteByDispatch(f, id, 0x20000, 0x80, 1);
+    WriteByDispatch(f, id, 0x21000, 0x80, 2);
+    REQUIRE_FALSE(ReadWord(f, 0x20010).preemtive);
+    REQUIRE_FALSE(f.cache->IsRegionGpuModified(0x21000, 0x80));
+    std::memset(f.bytes + 0x11040, 3, 0x10);
+    f.cache->WriteMemory(0x21040, 0x10);
+    Access::Upload(*f.cache, id, 0x21000, 0x1000);
+    REQUIRE(Access::Get(*f.cache, id).bytes[0x1040] == 3);
+    // Returning to the landed value must not compare against the uploaded CPU value.
+    std::memset(f.bytes + 0x11040, 2, 0x10);
+    f.cache->WriteMemory(0x21040, 0x10);
+    REQUIRE_FALSE(ReadWord(f, 0x21010).preemtive);
+    REQUIRE(f.bytes[0x11040] == 2);
+    REQUIRE(Access::ReadChecks(*f.cache).checked == 2);
+    REQUIRE(Access::ReadChecks(*f.cache).compared == 0xf0);
+    REQUIRE(Access::ReadChecks(*f.cache).mismatched == 0);
+    REQUIRE(Access::ReadChecks(*f.cache).uncovered == 0);
+}
+
 TEST_CASE("Adjacent read downloads stop before a page they cannot take",
           "[buffer_ports][read_runs]") {
     Fixture f;

@@ -403,7 +403,7 @@ std::optional<VideoCore::RasterizerDownloadArea> BufferCache<P>::GetFlushArea(DA
     area->preemtive = !IsRegionGpuModified(device_addr_start_aligned,
                                            device_addr_end_aligned - device_addr_start_aligned);
     NoteReadBack(device_addr_start_aligned, device_addr_end_aligned, !area->preemtive);
-    // EDEN_NX2_READ_CHECK: a read an early download serves takes a flush, which compares
+    // EDEN_NX2_READ_CHECK: a read a prefetched download serves takes a flush, which compares
     // what it finds with the GPU's bytes now.
     const bool check_early =
         ReadChecks() && EarlyDownloadServes(device_addr_start_aligned,
@@ -817,7 +817,7 @@ void BufferCache<P>::RecordReadDownload(std::span<const std::pair<DAddr, u64>> r
                 });
             }
         }
-        // EDEN_NX2_READ_CHECK: what early downloads brought to the read's pages before it
+        // EDEN_NX2_READ_CHECK: what prefetched downloads brought to the read's pages before it
         // came. No longer GPU-modified, they are compared as they landed.
         struct LandedCopy {
             u64 offset; ///< In the check's staging, past its own offset
@@ -1138,9 +1138,11 @@ void BufferCache<P>::NoteEarlyLanded(const ReadDownload& download,
     if (early_landed.size() >= 4 * MaxReadBackPages) {
         early_landed.clear();
     }
-    download.clean_ranges.ForEach([&](DAddr start, DAddr end) {
+    const auto note_range = [&](DAddr start, DAddr end) {
         Common::RangeSet<DAddr> landed;
-        landed.Add(start, end - start);
+        download.write_ranges.ForEachInRange(start, end - start, [&](DAddr lower, DAddr upper) {
+            landed.Add(lower, upper - lower);
+        });
         cpu_written.ForEachInRange(start, end - start, [&](DAddr lower, DAddr upper) {
             landed.Subtract(lower, upper - lower);
         });
@@ -1156,7 +1158,13 @@ void BufferCache<P>::NoteEarlyLanded(const ReadDownload& download,
                 entry.bytes.Add(from, to - from);
             }
         });
-    });
+    };
+    if (download.early) {
+        download.clean_ranges.ForEach(note_range);
+    }
+    if (download.speculative_clean_ranges) {
+        download.speculative_clean_ranges->ForEach(note_range);
+    }
 }
 
 template <class P>
@@ -1284,10 +1292,6 @@ void BufferCache<P>::WriteReadDownloads(u64 tick, VideoCore::AsyncReadback::Land
                                               end - start);
                     });
             }
-            // EDEN_NX2_READ_CHECK: what early downloads brought, for the reads they serve.
-            if (download.early && ReadChecks()) {
-                NoteEarlyLanded(download, cpu_written);
-            }
             // EDEN_NX2_READ_CHECK: what later reads' checks find of an earlier download where they kept its bytes.
             for (size_t later = 1; later < read_downloads.size(); ++later) {
                 if (read_downloads[later].check) {
@@ -1309,6 +1313,10 @@ void BufferCache<P>::WriteReadDownloads(u64 tick, VideoCore::AsyncReadback::Land
                     }
                     read_download_ranges.Subtract(report.addr, report.size);
                 }
+            }
+            // EDEN_NX2_READ_CHECK: only surviving prefetched bytes, for the reads they serve.
+            if ((download.early || download.speculative_clean_ranges) && ReadChecks()) {
+                NoteEarlyLanded(download, cpu_written);
             }
             download.clean_ranges.ForEach([&](DAddr start, DAddr end) {
                 gpu_modified_ranges.Subtract(start, end - start);
