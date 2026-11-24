@@ -162,3 +162,59 @@ settings. Matching symbols remain beside its executable for future profiling.
   confirmed no recording remained. There is no ETW capture from this round.
 - No RenderDoc/Nsight capture, Vulkan validation run, or renderer optimization
   has yet been validated. A quiet log is not proof of synchronization accuracy.
+
+## Local baseline build follow-up
+
+The toolchain was subsequently installed and version-verified in
+`../Lichii-toolchain`. The exact clean build-386 source built successfully with
+LLVM 22.1.8, the pinned Windows PGO profile and ThinLTO. Its executable, PDB,
+deployed runtime, completed manifest and file hashes were preserved as
+`packages/build386-local-pgo`. This supersedes the initial missing-tools limit
+above. CPU/GPU WPR smoke recording and stop also succeeded; this was a tool
+check during compilation, not an emulator performance trace.
+
+The first local clean acceptance recording, `local-baseline-zora-1x-A1.json`,
+measured 46.459, 47.151 and 47.211 FPS in three 60-second windows. Median mean
+frame time was 21.208 ms and worst-run p99 was 23.314 ms. Both configuration
+files match the earlier published-binary run byte-for-byte; the boot log shows
+the same DLSS mode, dimensions, render follower and graphics settings. The
+original manual save hashes and camera position match as well.
+
+This difference from the earlier ~43 FPS is **not a candidate optimization
+result**. The shader cache grew after subsequent play, the local package has a
+different build environment/runtime deployment, and this first check loaded
+Death Mountain before explicitly selecting the unchanged Zora River manual
+save. Recheck the published executable under current conditions and use matched
+direct-to-Zora launches for the candidate A/B/B/A comparison. The local baseline
+still misses 60 FPS; its median frame time is about 4.54 ms above that budget.
+
+The first runtime candidate ports Lichii #2483's guarded adjacent readbacks in
+its own commit. A separate diagnostic change covers reads of adjacent pages
+after their prefetched bytes have landed. It built successfully; focused tests
+passed 9 cases / 424 assertions, and all buffer-port tests passed 81 cases /
+26,519 assertions. Live checking reached 318,198 comparisons / 3,820,947 KiB
+without reported mismatches or uncovered GPU-written bytes, excluding 440,747
+bytes changed by later writes. This limited check does not prove all accuracy.
+The subsequent A/B/B/A comparison retained six clean 60-second windows per
+build: median FPS 47.052 -> 47.669 (+1.313%), median mean frame time
+21.253 -> 20.978 ms (0.275 ms saved), worst-window p99 23.555 -> 23.139 ms.
+Configuration/switch hashes, 25 packaged DLLs and nine shared Streamline DLL
+hashes matched. This is a small scene-specific result, with overlapping run
+ranges and limited repeats; it is not a significance or general accuracy claim.
+Separate clean counter intervals did not show fewer host waits per present
+(6.045 -> 6.179), although summed wait durations were lower. The mechanism
+therefore remains partly unconfirmed. See `adjacent-readback-experiment.md`
+for the phase table, counter method and limitations. Native 60 FPS is not met.
+
+The original published executable was subsequently retested: 47.522, 47.291,
+47.263 FPS, median 47.291 FPS / 21.146 ms, worst-run p99 23.145 ms. It now also
+exceeds the old ~43 FPS reference, so that historical difference is not a fork
+or rebuild gain. Its current range overlaps the candidate's range; the small
+matched-local-build observation should not be advertised as a proven release
+advantage. The source candidate remains isolated for further investigation.
+
+Native capture limits remain: Nsight Graphics hardware counters were access
+blocked, Nsight Systems Vulkan tracing failed its registration permission check,
+and Windows canceled RenderDoc's capture-layer registration. No global counter
+policy was weakened. There is still no validated RenderDoc/Nsight game capture
+or Vulkan validation result.
